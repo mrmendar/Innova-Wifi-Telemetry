@@ -1,104 +1,102 @@
-using Intel.Telemetry.Api.Client;
-using Intel.Telemetry.Api.Commands.Data;
-using Intel.Telemetry.Api.Message.Version;
-using System.Text.Json.Nodes;
+
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using System;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Innova.Wifi.Agent;
 
 public class Worker : BackgroundService
 {
     private readonly ILogger<Worker> _logger;
-    private readonly WifiRepository _repo = new();
+    private readonly WifiRepository _repo;
+    private readonly IConfiguration _configuration;
+    private IWifiProvider? _activeProvider; // Deðiþken ismini sabitledik
     private int _lastRssi = 0;
 
-    public Worker(ILogger<Worker> logger) => _logger = logger;
+    public Worker(ILogger<Worker> logger, IConfiguration configuration)
+    {
+        _logger = logger;
+        _configuration = configuration;
+
+        // Repository artýk ayarlarý IConfiguration üzerinden güvenli bir þekilde alýyor
+        _repo = new WifiRepository(configuration);
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("Innova Wi-Fi Ajaný baþlatýlýyor...");
+        _logger.LogInformation("Innova Wi-Fi Telemetry Agent baþlatýlýyor...");
 
-        string configPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ica_partner_config_evaluation_signed.json");
+        // 1. ADIM: Saðlayýcý Seçimi
+        await InitializeProviderAsync();
 
-        try
+        // 2. ADIM: Ana Veri Toplama Döngüsü
+        while (!stoppingToken.IsCancellationRequested)
         {
-            // 1. SDK Baðlantýsý (Örnek koddaki gibi SchemaDataContainer ile)
-            await using var client = TelemetryClient.CreateNew(new FileInfo(configPath));
+            // Bu log her 5 saniyede bir çalýþtýðýný teyit eder
+            _logger.LogInformation(">>> Döngü çalýþýyor, veri bekleniyor...");
 
-            // NOT: Eðer SchemaDataContainer sýnýfýn yoksa, en azýndan boþ bir Dictionary mantýðý kurmalýsýn.
-            // Ama en iyisi örnek projedeki SchemaDataContainer.cs dosyasýný projene eklemendir.
-            var schemaDataContainer = new Intel.Telemetry.Test.App.SchemaContainer.SchemaDataContainer();
-
-            var context = await client.InitializeClientContextAsync(
-                TimeSpan.FromSeconds(15),
-                schemaDataContainer.AddOrUpdateSchemaEntries);
-
-            _logger.LogInformation("Intel Telemetry SDK baþarýyla baðlandý.");
-
-            while (!stoppingToken.IsCancellationRequested)
+            try
             {
-                try
+                if (_activeProvider == null)
                 {
-                    // 2. Wi-Fi Komutu (Örnek koddaki parametrelerin aynýsý)
-                    var command = new JsonCommand
-                    {
-                        Name = "Get Wi-Fi Connection Statistics",
-                        TimeOut = TimeSpan.FromSeconds(30), // KRÝTÝK: Örnek kodda var, bizde yoktu!
-                        Version = new MessageVersion { Major = 3, Minor = 0 },
-                        ResponseVersion = 3,
-                        CommandParameter = new JsonObject { ["BssType"] = "Primary BSS" }
-                    };
-
-                    // 3. Komutu Gönder
-                    var response = await context.TelemetryCommandSender.SendTelemetryCommandAsync(command);
-
-                    if (response.Header != null && !response.Header.HasFailed && response.Payload != null)
-                    {
-                        var payload = response.Payload;
-                        var linkInfo = payload["Link Information"]?[0];
-
-                        if (linkInfo != null)
-                        {
-                            int currentRssi = int.Parse(linkInfo["Latest RSSI A Beacon Counter"]?.ToString() ?? "0");
-
-                            if (Math.Abs(currentRssi - _lastRssi) >= 3 || _lastRssi == 0)
-                            {
-                                var metric = new WifiMetric
-                                {
-                                    DeviceMac = payload["STA MAC Address"]?.ToString() ?? "Unknown",
-                                    DeviceName = Environment.MachineName,
-                                    Bssid = linkInfo["BSSID"]?.ToString() ?? "Unknown",
-                                    Ssid = payload["SSID"]?.ToString() ?? "Unknown",
-                                    Band = linkInfo["Band"]?.ToString() ?? "Unknown",
-                                    Channel = int.Parse(linkInfo["Channel"]?.ToString() ?? "0"),
-                                    RssiA = currentRssi,
-                                    RssiB = int.Parse(linkInfo["Latest RSSI B Beacon Counter"]?.ToString() ?? "0"),
-                                    TxRetries = long.Parse(linkInfo["Tx Retries in Link Counter"]?.ToString() ?? "0"),
-                                    BadCrcCount = long.Parse(linkInfo["Bad-CRCs in Link Counter"]?.ToString() ?? "0"),
-                                    RawPayload = payload.ToString()
-                                };
-
-                                await _repo.InsertMetricAsync(metric);
-                                _lastRssi = currentRssi;
-                                _logger.LogInformation("[VERÝTABANI KAYIT] SSID: {Ssid} | RSSI: {Rssi} dBm", metric.Ssid, currentRssi);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Komut Hatasý: {Reason}", response.Header.FailureReason);
-                    }
-                }
-                catch (Exception loopEx)
-                {
-                    _logger.LogError("Döngü Hatasý: {Message}", loopEx.Message);
+                    _logger.LogWarning("Aktif saðlayýcý bulunamadý, yeniden baþlatýlýyor...");
+                    await InitializeProviderAsync();
+                    continue;
                 }
 
-                await Task.Delay(5000, stoppingToken);
+                var metric = await _activeProvider.GetCurrentMetricAsync();
+
+                if (metric == null)
+                {
+                    _logger.LogWarning("!!! Veri çekilemedi: {Provider} 'null' döndü.", _activeProvider.ProviderName);
+                }
+                else
+                {
+                    // Þimdilik deðiþim kontrolünü (Math.Abs) kapattýk ki veriyi anýnda görelim
+                    _logger.LogInformation("--- Veri yakalandý! SSID: {Ssid}, RSSI: {Rssi} dBm (Source: {Source})",
+                        metric.Ssid, metric.RssiA, _activeProvider.ProviderName);
+
+                    await _repo.InsertMetricAsync(metric);
+                    _logger.LogInformation("[KAYIT BAÞARILI] Veritabanýna yazýldý.");
+
+                    _lastRssi = metric.RssiA;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Beklenmedik Hata: {Msg}", ex.Message);
+            }
+
+            await Task.Delay(5000, stoppingToken);
+        }
+    }
+
+    private async Task InitializeProviderAsync()
+    {
+        var intel = new IntelWifiProvider();
+
+        if (intel.IsSupported())
+        {
+            try
+            {
+                await intel.InitializeAsync();
+                _activeProvider = intel;
+                _logger.LogInformation("Cihaz Intel ICA destekliyor. Full telemetri modu aktif.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Intel SDK bulundu ama baþlatýlamadý. Native Windows moduna geçiliyor. Hata: {Msg}", ex.Message);
+                _activeProvider = new NativeWifiProvider();
             }
         }
-        catch (Exception ex)
+        else
         {
-            _logger.LogCritical(ex, "SDK Baþlatýlamadý!");
+            _activeProvider = new NativeWifiProvider();
+            _logger.LogInformation("Donaným Intel ICA desteklemiyor. Genel (Native) Wi-Fi modu aktif.");
         }
     }
 }
