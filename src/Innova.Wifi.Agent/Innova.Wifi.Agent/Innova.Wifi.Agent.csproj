@@ -6,6 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>dotnet-Innova.Wifi.Agent-dd5704e2-0554-4f21-860d-e94418839c99</UserSecretsId>
     <Platforms>AnyCPU;x64</Platforms>
+    
   </PropertyGroup>
 
   <ItemGroup>
@@ -18,25 +19,25 @@
 
   <ItemGroup>
     <Reference Include="ICA.Dependencies.Isolator">
-      <HintPath>..\..\..\..\..\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\ICA.Dependencies.Isolator.dll</HintPath>
+      <HintPath>..\..\..\..\Users\q\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\ICA.Dependencies.Isolator.dll</HintPath>
     </Reference>
     <Reference Include="ICA.Dependencies.Isolator.Contracts">
-      <HintPath>..\..\..\..\..\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\ICA.Dependencies.Isolator.Contracts.dll</HintPath>
+      <HintPath>..\..\..\..\Users\q\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\ICA.Dependencies.Isolator.Contracts.dll</HintPath>
     </Reference>
     <Reference Include="ICA.Telemetry.Api">
-      <HintPath>..\..\..\..\..\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\ICA.Telemetry.Api.dll</HintPath>
+      <HintPath>..\..\..\..\Users\q\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\ICA.Telemetry.Api.dll</HintPath>
     </Reference>
     <Reference Include="ICA.Telemetry.Api.Context">
-      <HintPath>..\..\..\..\..\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\ICA.Telemetry.Api.Context.dll</HintPath>
+      <HintPath>..\..\..\..\Users\q\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\ICA.Telemetry.Api.Context.dll</HintPath>
     </Reference>
     <Reference Include="ICA.Telemetry.Internal.Contracts">
-      <HintPath>..\..\..\..\..\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\ICA.Telemetry.Internal.Contracts.dll</HintPath>
+      <HintPath>..\..\..\..\Users\q\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\ICA.Telemetry.Internal.Contracts.dll</HintPath>
     </Reference>
     <Reference Include="ICA.Telemetry.Internal.Errors.Contracts">
-      <HintPath>..\..\..\..\..\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\ICA.Telemetry.Internal.Errors.Contracts.dll</HintPath>
+      <HintPath>..\..\..\..\Users\q\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\ICA.Telemetry.Internal.Errors.Contracts.dll</HintPath>
     </Reference>
     <Reference Include="Intel.Telemetry.Api">
-      <HintPath>..\..\..\..\..\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\Intel.Telemetry.Api.dll</HintPath>
+      <HintPath>..\..\..\..\Users\q\Downloads\INTEL ICA(secret)\From Intel\ICA SW Evaluation Packages\ICA 2.90\ICA 2.90 SW Evaluation Package\SDK\Intel.Telemetry.Api.3.0.1\lib\net8.0\Intel.Telemetry.Api.dll</HintPath>
     </Reference>
   </ItemGroup>
 

@@ -1,9 +1,10 @@
-
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
-using System.IO;
+using System.Linq;
+using System.Net.NetworkInformation;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -14,15 +15,13 @@ public class Worker : BackgroundService
     private readonly ILogger<Worker> _logger;
     private readonly WifiRepository _repo;
     private readonly IConfiguration _configuration;
-    private IWifiProvider? _activeProvider; // Deðiþken ismini sabitledik
-    private int _lastRssi = 0;
+    private IWifiProvider? _activeProvider;
+    private string? _cachedMac; // Performans için MAC adresini bir kez alýp saklýyoruz
 
     public Worker(ILogger<Worker> logger, IConfiguration configuration)
     {
         _logger = logger;
         _configuration = configuration;
-
-        // Repository artýk ayarlarý IConfiguration üzerinden güvenli bir þekilde alýyor
         _repo = new WifiRepository(configuration);
     }
 
@@ -33,10 +32,12 @@ public class Worker : BackgroundService
         // 1. ADIM: Saðlayýcý Seçimi
         await InitializeProviderAsync();
 
+        // Fiziksel MAC adresini uygulama baþlarken bir kez çekiyoruz
+        _cachedMac = GetPhysicalMacAddress();
+
         // 2. ADIM: Ana Veri Toplama Döngüsü
         while (!stoppingToken.IsCancellationRequested)
         {
-            // Bu log her 5 saniyede bir çalýþtýðýný teyit eder
             _logger.LogInformation(">>> Döngü çalýþýyor, veri bekleniyor...");
 
             try
@@ -56,14 +57,26 @@ public class Worker : BackgroundService
                 }
                 else
                 {
-                    // Þimdilik deðiþim kontrolünü (Math.Abs) kapattýk ki veriyi anýnda görelim
-                    _logger.LogInformation("--- Veri yakalandý! SSID: {Ssid}, RSSI: {Rssi} dBm (Source: {Source})",
-                        metric.Ssid, metric.RssiA, _activeProvider.ProviderName);
+                    // --- KRÝTÝK DÜZELTME: VERÝ TEKÝLLEÞTÝRME VE TAMAMLAMA ---
 
+                    // Provider ne döndürürse döndürsün, biz gerçek fiziksel MAC'i yazýyoruz
+                    metric.DeviceMac = _cachedMac;
+                    metric.DeviceName = Environment.MachineName;
+
+                    // Grafana'daki 'source' filtresinin çalýþmasý için RawPayload'u dolduruyoruz
+                    var payloadObj = new
+                    {
+                        source = _activeProvider.ProviderName,
+                        captured_at = DateTime.Now,
+                        os_version = Environment.OSVersion.ToString()
+                    };
+                    metric.RawPayload = JsonSerializer.Serialize(payloadObj);
+
+                    // Veritabanýna Kayýt
                     await _repo.InsertMetricAsync(metric);
-                    _logger.LogInformation("[KAYIT BAÞARILI] Veritabanýna yazýldý.");
 
-                    _lastRssi = metric.RssiA;
+                    _logger.LogInformation("[KAYIT BAÞARILI] Source: {Source}, MAC: {Mac}, RSSI: {Rssi} dBm",
+                        _activeProvider.ProviderName, metric.DeviceMac, metric.RssiA);
                 }
             }
             catch (Exception ex)
@@ -71,6 +84,7 @@ public class Worker : BackgroundService
                 _logger.LogError("Beklenmedik Hata: {Msg}", ex.Message);
             }
 
+            // Mentörünün istediði gibi 5 saniyede bir (veri kaybý olmadan stabil çalýþma)
             await Task.Delay(5000, stoppingToken);
         }
     }
@@ -98,5 +112,30 @@ public class Worker : BackgroundService
             _activeProvider = new NativeWifiProvider();
             _logger.LogInformation("Donaným Intel ICA desteklemiyor. Genel (Native) Wi-Fi modu aktif.");
         }
+    }
+
+    // --- SÝHÝRLÝ DOKUNUÞ: FÝZÝKSEL MAC ADRESÝNÝ ÇEKEN METOD ---
+    private string GetPhysicalMacAddress()
+    {
+        try
+        {
+            var nic = NetworkInterface.GetAllNetworkInterfaces()
+                .FirstOrDefault(n => n.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 &&
+                                     n.OperationalStatus == OperationalStatus.Up);
+
+            if (nic != null)
+            {
+                var addr = nic.GetPhysicalAddress().ToString();
+                // 84144DF5AFDC -> 84:14:4D:F5:AF:DC formatýna çevir
+                return string.Join(":", Enumerable.Range(0, addr.Length / 2)
+                             .Select(i => addr.Substring(i * 2, 2)));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError("Fiziksel MAC adresi alýnýrken hata: {Msg}", ex.Message);
+        }
+
+        return "00:00:00:00:00:00";
     }
 }

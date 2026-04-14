@@ -85,6 +85,7 @@ public class IntelWifiProvider : IWifiProvider
             var payload = response.Payload;
             var linkInfo = payload["Link Information"]?[0];
             if (linkInfo == null) return null;
+            payload["source"] = "IntelSDK";
 
             return new WifiMetric
             {
