@@ -16,7 +16,7 @@ public class Worker : BackgroundService
     private readonly WifiRepository _repo;
     private readonly IConfiguration _configuration;
     private IWifiProvider? _activeProvider;
-    private string? _cachedMac; // Performans için MAC adresini bir kez alýp saklýyoruz
+    private string? _cachedMac;
 
     public Worker(ILogger<Worker> logger, IConfiguration configuration)
     {
@@ -49,26 +49,64 @@ public class Worker : BackgroundService
                     continue;
                 }
 
-                var metric = await _activeProvider.GetCurrentMetricAsync();
+                WifiMetric? metric = null;
+
+                // --- GELÝÞTÝRÝLMÝÞ FALLBACK VE YETKÝ KONTROLÜ ---
+                try
+                {
+                    metric = await _activeProvider.GetCurrentMetricAsync();
+                }
+                catch (Exception ex)
+                {
+                    // Hata mesajýný analiz et (Özellikle Error 5 / Access Denied kontrolü)
+                    string errorMsg = ex.Message;
+
+                    if (errorMsg.Contains("Access is denied") || errorMsg.Contains("ErrorCode: 5"))
+                    {
+                        _logger.LogError("!!! KRÝTÝK YETKÝ HATASI: Windows Konum izinleri kapalý! " +
+                                         "Lütfen Ayarlar > Gizlilik > Konum > 'Masaüstü uygulamalarýnýn konumunuza eriþmesine izin ver' seçeneðini aktif edin.");
+                    }
+                    else
+                    {
+                        _logger.LogError("Saðlayýcý veri çekerken hata fýrlattý: {Msg}", errorMsg);
+                    }
+                }
+
+                // KRÝTÝK: Eðer Intel null döndüyse veya hata verdiyse, anýnda Native'e geç ve tekrar dene
+                if (metric == null && _activeProvider is IntelWifiProvider)
+                {
+                    _logger.LogWarning("!!! Intel SDK veri çekemedi (Lisans/Kontrat sorunu). Native Windows moduna otomatik geçiþ yapýlýyor.");
+
+                    _activeProvider = new NativeWifiProvider();
+
+                    // Native üzerinden tekrar deniyoruz
+                    try
+                    {
+                        metric = await _activeProvider.GetCurrentMetricAsync();
+                    }
+                    catch (Exception ex) when (ex.Message.Contains("Access is denied") || ex.Message.Contains("ErrorCode: 5"))
+                    {
+                        _logger.LogError("!!! Native modda da YETKÝ HATASI: Konum hizmetlerini açmanýz gerekiyor.");
+                    }
+                }
 
                 if (metric == null)
                 {
-                    _logger.LogWarning("!!! Veri çekilemedi: {Provider} 'null' döndü.", _activeProvider.ProviderName);
+                    _logger.LogWarning("!!! Veri çekilemedi: {Provider} þu an veri saðlayamýyor.", _activeProvider.ProviderName);
                 }
                 else
                 {
-                    // --- KRÝTÝK DÜZELTME: VERÝ TEKÝLLEÞTÝRME VE TAMAMLAMA ---
-
-                    // Provider ne döndürürse döndürsün, biz gerçek fiziksel MAC'i yazýyoruz
+                    // Veri tekilleþtirme ve tamamlama
                     metric.DeviceMac = _cachedMac;
                     metric.DeviceName = Environment.MachineName;
 
-                    // Grafana'daki 'source' filtresinin çalýþmasý için RawPayload'u dolduruyoruz
+                    // Grafana payload hazýrlýðý
                     var payloadObj = new
                     {
                         source = _activeProvider.ProviderName,
                         captured_at = DateTime.Now,
-                        os_version = Environment.OSVersion.ToString()
+                        os_version = Environment.OSVersion.ToString(),
+                        status = _activeProvider is NativeWifiProvider ? "Fallback Mode" : "High-Fidelity Mode"
                     };
                     metric.RawPayload = JsonSerializer.Serialize(payloadObj);
 
@@ -81,10 +119,10 @@ public class Worker : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError("Beklenmedik Hata: {Msg}", ex.Message);
+                _logger.LogError("Döngü içerisinde beklenmedik genel hata: {Msg}", ex.Message);
             }
 
-            // Mentörünün istediði gibi 5 saniyede bir (veri kaybý olmadan stabil çalýþma)
+            // 5 saniyelik periyot
             await Task.Delay(5000, stoppingToken);
         }
     }
@@ -103,7 +141,7 @@ public class Worker : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning("Intel SDK bulundu ama baþlatýlamadý. Native Windows moduna geçiliyor. Hata: {Msg}", ex.Message);
+                _logger.LogWarning("Intel SDK bulundu ama baþlatýlamadý. Native Windows moduna geçiliyor.");
                 _activeProvider = new NativeWifiProvider();
             }
         }
@@ -114,7 +152,6 @@ public class Worker : BackgroundService
         }
     }
 
-    // --- SÝHÝRLÝ DOKUNUÞ: FÝZÝKSEL MAC ADRESÝNÝ ÇEKEN METOD ---
     private string GetPhysicalMacAddress()
     {
         try
@@ -126,7 +163,6 @@ public class Worker : BackgroundService
             if (nic != null)
             {
                 var addr = nic.GetPhysicalAddress().ToString();
-                // 84144DF5AFDC -> 84:14:4D:F5:AF:DC formatýna çevir
                 return string.Join(":", Enumerable.Range(0, addr.Length / 2)
                              .Select(i => addr.Substring(i * 2, 2)));
             }
