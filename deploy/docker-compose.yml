@@ -1,5 +1,7 @@
 version: '3.8'
+
 services:
+  # 1. Veritabanı Katmanı
   wifi-db:
     image: postgres:latest
     container_name: innova_wifi_db
@@ -8,10 +10,26 @@ services:
       POSTGRES_PASSWORD: innova123
       POSTGRES_DB: wifi_analytics_db
     ports:
-      - "5433:5432" # Çakışmayı önlemek için 5433 portunu kullanıyoruz
+      - "5433:5432" # Dışarıdan erişim için 5433, içeriden 5432
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data:/var/lib/postgresql/data
 
+  # 2. Merkezi API Katmanı (Yeni Eklendi)
+  wifi-api:
+    build:
+      context: ../src/Innova.Wifi.Api # Dockerfile'ın bulunduğu klasör yolu
+      dockerfile: Dockerfile
+    container_name: innova_wifi_api
+    depends_on:
+      - wifi-db
+    ports:
+      - "5001:80" # API'ye dışarıdan 5001 portuyla erişeceğiz
+    environment:
+      # Veritabanı bağlantı dizesi (Host olarak servis adı olan wifi-db kullanıldı)
+      ConnectionStrings__DefaultConnection: "Host=wifi-db;Database=wifi_analytics_db;Username=innova_admin;Password=innova123;Port=5432"
+      ASPNETCORE_ENVIRONMENT: Development
+
+  # 3. Görselleştirme Katmanı
   grafana:
     image: grafana/grafana-oss:latest
     container_name: innova_grafana
