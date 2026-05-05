@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Linq;
 using System.Net.NetworkInformation;
+using System.Runtime.InteropServices; // Ýþletim sistemi tespiti için kritik
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,18 +19,18 @@ public class Worker : BackgroundService
     private IWifiProvider? _activeProvider;
     private string? _cachedMac;
 
-    public Worker(ILogger<Worker> logger, IConfiguration configuration)
+    public Worker(ILogger<Worker> logger, IConfiguration configuration, WifiRepository repo)
     {
         _logger = logger;
         _configuration = configuration;
-        _repo = new WifiRepository(configuration);
+        _repo = repo;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Innova Wi-Fi Telemetry Agent baþlatýlýyor...");
 
-        // 1. ADIM: Saðlayýcý Seçimi
+        // 1. ADIM: Ýþletim Sistemine Göre Saðlayýcý Seçimi (Cross-Platform)
         await InitializeProviderAsync();
 
         // Fiziksel MAC adresini uygulama baþlarken bir kez çekiyoruz
@@ -58,10 +59,9 @@ public class Worker : BackgroundService
                 }
                 catch (Exception ex)
                 {
-                    // Hata mesajýný analiz et (Özellikle Error 5 / Access Denied kontrolü)
                     string errorMsg = ex.Message;
-
-                    if (errorMsg.Contains("Access is denied") || errorMsg.Contains("ErrorCode: 5"))
+                    if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows) &&
+                       (errorMsg.Contains("Access is denied") || errorMsg.Contains("ErrorCode: 5")))
                     {
                         _logger.LogError("!!! KRÝTÝK YETKÝ HATASI: Windows Konum izinleri kapalý! " +
                                          "Lütfen Ayarlar > Gizlilik > Konum > 'Masaüstü uygulamalarýnýn konumunuza eriþmesine izin ver' seçeneðini aktif edin.");
@@ -72,18 +72,13 @@ public class Worker : BackgroundService
                     }
                 }
 
-                // KRÝTÝK: Eðer Intel null döndüyse veya hata verdiyse, anýnda Native'e geç ve tekrar dene
-                if (metric == null && _activeProvider is IntelWifiProvider)
+                // Windows'a özel Intel -> Native Fallback mantýðý
+                if (metric == null && RuntimeInformation.IsOSPlatform(OSPlatform.Windows) && _activeProvider is IntelWifiProvider)
                 {
-                    _logger.LogWarning("!!! Intel SDK veri çekemedi (Lisans/Kontrat sorunu). Native Windows moduna otomatik geçiþ yapýlýyor.");
-
+                    _logger.LogWarning("!!! Intel SDK veri çekemedi. Native Windows moduna otomatik geçiþ yapýlýyor.");
                     _activeProvider = new NativeWifiProvider();
 
-                    // Native üzerinden tekrar deniyoruz
-                    try
-                    {
-                        metric = await _activeProvider.GetCurrentMetricAsync();
-                    }
+                    try { metric = await _activeProvider.GetCurrentMetricAsync(); }
                     catch (Exception ex) when (ex.Message.Contains("Access is denied") || ex.Message.Contains("ErrorCode: 5"))
                     {
                         _logger.LogError("!!! Native modda da YETKÝ HATASI: Konum hizmetlerini açmanýz gerekiyor.");
@@ -96,17 +91,18 @@ public class Worker : BackgroundService
                 }
                 else
                 {
-                    // Veri tekilleþtirme ve tamamlama
+                    // Veri tamamlama
                     metric.DeviceMac = _cachedMac;
                     metric.DeviceName = Environment.MachineName;
 
-                    // Grafana payload hazýrlýðý
+                    // Payload hazýrlýðý
                     var payloadObj = new
                     {
                         source = _activeProvider.ProviderName,
                         captured_at = DateTime.Now,
-                        os_version = Environment.OSVersion.ToString(),
-                        status = _activeProvider is NativeWifiProvider ? "Fallback Mode" : "High-Fidelity Mode"
+                        os_description = RuntimeInformation.OSDescription,
+                        architecture = RuntimeInformation.OSArchitecture.ToString(),
+                        status = GetProviderStatus()
                     };
                     metric.RawPayload = JsonSerializer.Serialize(payloadObj);
 
@@ -122,56 +118,94 @@ public class Worker : BackgroundService
                 _logger.LogError("Döngü içerisinde beklenmedik genel hata: {Msg}", ex.Message);
             }
 
-            // 5 saniyelik periyot
             await Task.Delay(5000, stoppingToken);
         }
     }
 
     private async Task InitializeProviderAsync()
     {
-        var intel = new IntelWifiProvider();
-
-        if (intel.IsSupported())
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            try
+            var intel = new IntelWifiProvider();
+            if (intel.IsSupported())
             {
-                await intel.InitializeAsync();
-                _activeProvider = intel;
-                _logger.LogInformation("Cihaz Intel ICA destekliyor. Full telemetri modu aktif.");
+                try
+                {
+                    await intel.InitializeAsync();
+                    _activeProvider = intel;
+                    _logger.LogInformation("Cihaz Intel ICA destekliyor. Full telemetri modu aktif.");
+                }
+                catch (Exception)
+                {
+                    _logger.LogWarning("Intel SDK bulundu ama baþlatýlamadý. Native Windows moduna geçiliyor.");
+                    _activeProvider = new NativeWifiProvider();
+                }
             }
-            catch (Exception ex)
+            else
             {
-                _logger.LogWarning("Intel SDK bulundu ama baþlatýlamadý. Native Windows moduna geçiliyor.");
                 _activeProvider = new NativeWifiProvider();
+                _logger.LogInformation("Donaným Intel ICA desteklemiyor. Genel (Native) Wi-Fi modu aktif.");
             }
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            _activeProvider = new LinuxWifiProvider();
+            _logger.LogInformation("Linux platformu algýlandý. nmcli saðlayýcýsý aktif.");
+        }
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            _activeProvider = new MacWifiProvider();
+            _logger.LogInformation("macOS platformu algýlandý. airport saðlayýcýsý aktif.");
         }
         else
         {
-            _activeProvider = new NativeWifiProvider();
-            _logger.LogInformation("Donaným Intel ICA desteklemiyor. Genel (Native) Wi-Fi modu aktif.");
+            _logger.LogError("Desteklenmeyen iþletim sistemi: {OS}", RuntimeInformation.OSDescription);
+            _activeProvider = null;
         }
+    }
+
+    private string GetProviderStatus()
+    {
+        if (_activeProvider is IntelWifiProvider) return "High-Fidelity Mode (Intel)";
+        if (_activeProvider is NativeWifiProvider) return "Standard Mode (Native)";
+        return "Cross-Platform Mode";
     }
 
     private string GetPhysicalMacAddress()
     {
         try
         {
+            // GERÇEK FÝZÝKSEL ADAPTÖRÜ BULMAK ÝÇÝN GELÝÞTÝRÝLMÝÞ FÝLTRELEME
             var nic = NetworkInterface.GetAllNetworkInterfaces()
-                .FirstOrDefault(n => n.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 &&
-                                     n.OperationalStatus == OperationalStatus.Up);
+                .FirstOrDefault(n =>
+                    // Wi-Fi kartý tipi veya açýklamasý kontrolü
+                    (n.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 ||
+                     n.Description.ToLower().Contains("wlan") ||
+                     n.Description.ToLower().Contains("wi-fi")) &&
+
+                    // Sadece aktif (Up) olanlar
+                    n.OperationalStatus == OperationalStatus.Up &&
+
+                    // --- SANAL ADAPTÖR FÝLTRELERÝ (Mükerrer kaydý önler) ---
+                    !n.Description.ToLower().Contains("virtual") &&            // Sanal (Docker/Hyper-V)
+                    !n.Description.ToLower().Contains("pseudo") &&             // Sahte adaptörler
+                    !n.Description.ToLower().Contains("microsoft wi-fi direct") && // Wi-Fi Direct hileleri
+                    !n.Description.ToLower().Contains("adapter - vethernet"));  // Sanal Ethernet köprüleri
 
             if (nic != null)
             {
                 var addr = nic.GetPhysicalAddress().ToString();
-                return string.Join(":", Enumerable.Range(0, addr.Length / 2)
-                             .Select(i => addr.Substring(i * 2, 2)));
+                if (!string.IsNullOrEmpty(addr))
+                {
+                    return string.Join(":", Enumerable.Range(0, addr.Length / 2)
+                                 .Select(i => addr.Substring(i * 2, 2)));
+                }
             }
         }
         catch (Exception ex)
         {
             _logger.LogError("Fiziksel MAC adresi alýnýrken hata: {Msg}", ex.Message);
         }
-
         return "00:00:00:00:00:00";
     }
 }

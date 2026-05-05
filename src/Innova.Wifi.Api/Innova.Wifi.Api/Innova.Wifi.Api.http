@@ -1,0 +1,6 @@
+@Innova.Wifi.Api_HostAddress = http://localhost:5237
+
+GET {{Innova.Wifi.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

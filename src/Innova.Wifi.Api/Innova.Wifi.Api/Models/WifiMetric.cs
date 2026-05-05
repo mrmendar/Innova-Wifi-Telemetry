@@ -1,4 +1,4 @@
-﻿
+﻿namespace Innova.Wifi.Api.Models;
 public class WifiMetric
 {
     public string? DeviceMac { get; set; }
