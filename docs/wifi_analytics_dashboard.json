@@ -1,0 +1,1044 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Toplam Cihaz Sayısı",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "eflbydjhsyewwb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "continuous-RdYlGr"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "percent"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 10,
+      "options": {
+        "minVizHeight": 75,
+        "minVizWidth": 75,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true,
+        "sizing": "auto"
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "wifi_analytics_db",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH HamVeri AS (\r\n  -- Adım 1: Her satırın yanına bir önceki paketin zamanını koyuyoruz\r\n  SELECT \r\n    rssi_a,\r\n    created_at,\r\n    LAG(created_at) OVER (ORDER BY created_at) as onceki_zaman\r\n  FROM wifi_metrics\r\n  WHERE created_at > NOW() - INTERVAL '10 minutes'\r\n),\r\nHesaplanmisMetrikler AS (\r\n  -- Adım 2: RSSI skorunu ve kopma (gap) durumunu belirliyoruz\r\n  SELECT \r\n    CASE \r\n      WHEN rssi_a >= -60 THEN 95 + (rssi_a + 60)\r\n      WHEN rssi_a >= -75 THEN 70 + (rssi_a + 75) * 1.5\r\n      WHEN rssi_a >= -85 THEN 30 + (rssi_a + 85) * 4\r\n      ELSE 0 \r\n    END as satir_skoru,\r\n    -- Eğer iki paket arası 30 saniyeden fazlaysa bunu '1' (kopma) say\r\n    CASE \r\n      WHEN created_at - onceki_zaman > INTERVAL '30 seconds' THEN 1 \r\n      ELSE 0 \r\n    END as kopma_mi\r\n  FROM HamVeri\r\n)\r\n-- Adım 3: Final Skoru Hesapla\r\nSELECT \r\n  GREATEST(0, \r\n    AVG(satir_skoru) - (SUM(kopma_mi) * 10) \r\n  ) as \"Ağ Sağlık Skoru\"\r\nFROM HesaplanmisMetrikler;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Ağ sağlık skoru",
+      "type": "gauge"
+    },
+    {
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 12,
+      "options": {
+        "alertInstanceLabelFilter": "",
+        "alertName": "",
+        "dashboardAlerts": false,
+        "groupBy": [],
+        "groupMode": "default",
+        "maxItems": 20,
+        "showInactiveAlerts": false,
+        "sortOrder": 1,
+        "stateFilter": {
+          "error": true,
+          "firing": true,
+          "noData": false,
+          "normal": false,
+          "pending": true,
+          "recovering": true
+        },
+        "viewMode": "list"
+      },
+      "pluginVersion": "12.4.2",
+      "title": "Alerts",
+      "type": "alertlist"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "eflbydjhsyewwb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "purple",
+            "mode": "shades"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 0,
+        "y": 15
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "showPercentChange": false,
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "wifi_analytics_db",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "eflbydjhsyewwb"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "-- Detaylar (Bağlantı Tipine Göre)\r\nWITH Detay AS (\r\n  SELECT \r\n    raw_payload->>'source' AS label,\r\n    COUNT(DISTINCT device_mac) AS value\r\n  FROM wifi_metrics\r\n  GROUP BY raw_payload->>'source'\r\n),\r\n-- Genel Toplam\r\nToplam AS (\r\n  SELECT \r\n    'TOPLAM' AS label,\r\n    COUNT(DISTINCT device_mac) AS value\r\n  FROM wifi_metrics\r\n)\r\nSELECT label, value FROM Toplam\r\nUNION ALL\r\nSELECT label, value FROM Detay;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Toplam Cihaz Sayısı",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "eflbydjhsyewwb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "semi-dark-green",
+            "mode": "shades"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 8,
+        "y": 15
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "horizontal",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "showPercentChange": false,
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "wifi_analytics_db",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH Detay AS (\r\n  SELECT \r\n    raw_payload->>'source' AS metric,\r\n    COUNT(DISTINCT device_mac) AS value\r\n  FROM wifi_metrics\r\n  WHERE created_at > NOW() - INTERVAL '20 seconds'\r\n  GROUP BY raw_payload->>'source'\r\n),\r\nToplam AS (\r\n  SELECT \r\n    'TOPLAM' AS metric,\r\n    COUNT(DISTINCT device_mac) AS value\r\n  FROM wifi_metrics\r\n  WHERE created_at > NOW() - INTERVAL '20 seconds'\r\n)\r\nSELECT metric, value FROM Toplam\r\nUNION ALL\r\nSELECT metric, value FROM Detay;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Online Cihaz Sayısı",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "eflbydjhsyewwb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "dark-red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 8,
+        "x": 16,
+        "y": 15
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "showPercentChange": false,
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "wifi_analytics_db",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT \r\n  'TOPLAM' AS label,\r\n  (SELECT COUNT(DISTINCT device_mac) FROM wifi_metrics) - \r\n  (SELECT COUNT(DISTINCT device_mac) FROM wifi_metrics WHERE created_at > NOW() - INTERVAL '20 seconds') \r\n  AS value;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Offline cihaz sayısı",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "eflbydjhsyewwb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 14,
+        "x": 0,
+        "y": 21
+      },
+      "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "wifi_analytics_db",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH time_buckets AS (\r\n  -- Zaman eksenini 1'er dakikalık bloklar halinde oluşturuyoruz\r\n  SELECT generate_series(\r\n    date_trunc('minute', $__timeFrom()::timestamp),\r\n    date_trunc('minute', $__timeTo()::timestamp),\r\n    '1 minute'::interval \r\n  ) AS bucket_time\r\n),\r\ndevice_data AS (\r\n  -- Her cihazın hangi dakikalarda online olduğunu buluyoruz\r\n  SELECT \r\n    date_trunc('minute', created_at) as data_time,\r\n    device_mac\r\n  FROM wifi_metrics\r\n  WHERE $__timeFilter(created_at)\r\n  GROUP BY 1, 2\r\n),\r\ntotal_devices AS (\r\n  -- Toplam cihaz sayısını alıyoruz (Envanterdeki benzersiz MAC sayısı)\r\n  SELECT COUNT(DISTINCT device_mac) as total FROM wifi_metrics\r\n)\r\nSELECT\r\n  tb.bucket_time AS \"time\",\r\n  COUNT(DISTINCT dd.device_mac) AS \"Online\",\r\n  (SELECT total FROM total_devices) - COUNT(DISTINCT dd.device_mac) AS \"Offline\"\r\nFROM time_buckets tb\r\nLEFT JOIN device_data dd ON dd.data_time = tb.bucket_time\r\nGROUP BY 1\r\nORDER BY 1;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Online/Offline anlık sayı",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "eflbydjhsyewwb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 10,
+        "x": 14,
+        "y": 21
+      },
+      "id": 5,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "wifi_analytics_db",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\r\n  device_name AS \"Cihaz Adı\",\r\n  device_mac AS \"MAC Adresi\",\r\n  MAX(rssi_a) AS \"Maks RSSI (dBm)\"\r\nFROM wifi_metrics\r\nWHERE created_at > NOW() - INTERVAL '10 minutes'\r\nGROUP BY device_name, device_mac\r\nORDER BY \"Maks RSSI (dBm)\" DESC\r\nLIMIT 10; -- Sadece en iyi 10 cihazı getirir",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Son 10 dakika max rssi",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "eflbydjhsyewwb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 10,
+        "x": 14,
+        "y": 27
+      },
+      "id": 6,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "wifi_analytics_db",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\r\n  device_name AS \"Cihaz Adı\",\r\n  device_mac AS \"MAC Adresi\",\r\n  MIN(rssi_a) AS \"Min RSSI (dBm)\"\r\nFROM wifi_metrics\r\nWHERE created_at > NOW() - INTERVAL '10 minutes'\r\nGROUP BY device_name, device_mac\r\nORDER BY \"Min RSSI (dBm)\" ASC\r\nLIMIT 10; -- Sadece en zayıf 10 cihazı getirir",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Son 10 dakika min rssi",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "eflbydjhsyewwb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "Çevrimdışı": {
+                  "color": "dark-red",
+                  "index": 1,
+                  "text": "Çevrimdışı"
+                },
+                "Çevrimiçi": {
+                  "color": "semi-dark-green",
+                  "index": 0,
+                  "text": "Çevrimiçi"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Durum"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Band"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Kaynak"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 115
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 8,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "wifi_analytics_db",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT DISTINCT ON (device_mac)\r\n  device_name AS \"Cihaz Adı\",\r\n  device_mac AS \"MAC Adresi\",\r\n  ssid AS \"SSID\",        -- Direkt sütundan alıyoruz\r\n  band AS \"Band\",        -- Sütundan (Şu an DB'de NULL görünüyor)\r\n  channel AS \"Kanal\",    -- Sütundan\r\n  raw_payload->>'source' AS \"Kaynak\", -- Kaynak hala JSON içinde olabilir\r\n  -- Telemetri Modu Belirleme\r\n  CASE \r\n    WHEN raw_payload->>'source' ILIKE '%Intel%' THEN 'Full Telemetry'\r\n    ELSE 'Fallback Mode'\r\n  END AS \"Çalışma Modu\",\r\n  -- Çevrimiçi Durumu (20 Saniye Kuralı)\r\n  CASE \r\n    WHEN created_at > NOW() - INTERVAL '20 seconds' THEN 'Çevrimiçi'\r\n    ELSE 'Çevrimdışı'\r\n  END AS \"Durum\",\r\n  created_at AS \"Son Veri Zamanı\"\r\nFROM wifi_metrics\r\nORDER BY device_mac, created_at DESC;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Genel Cihaz Bilgileri",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "eflbydjhsyewwb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Cihaz Adı"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "MAC Adresi"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 162
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Toplam Kopma Adedi"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 151
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 10,
+        "x": 0,
+        "y": 41
+      },
+      "id": 9,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "wifi_analytics_db",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH GecmisKopmalar AS (\r\n  -- 1. ADIM: Son 8 saat içindeki verileri al ve aradaki boşlukları say\r\n  SELECT \r\n    device_mac,\r\n    COUNT(*) as gecmis_adet\r\n  FROM (\r\n    SELECT \r\n      device_mac,\r\n      created_at,\r\n      created_at - LAG(created_at) OVER (PARTITION BY device_mac ORDER BY created_at) as fark\r\n    FROM wifi_metrics\r\n    WHERE created_at > NOW() - INTERVAL '8 hours' -- Filtre eklendi\r\n  ) t\r\n  WHERE fark > INTERVAL '20 seconds'\r\n  GROUP BY 1\r\n),\r\nCihazBazliSonVeri AS (\r\n  -- 2. ADIM: Son 8 saat içinde en az bir kez görülmüş cihazları bul\r\n  SELECT \r\n    device_name,\r\n    device_mac,\r\n    MAX(created_at) as son_gorulme\r\n  FROM wifi_metrics\r\n  WHERE created_at > NOW() - INTERVAL '8 hours' -- Filtre eklendi\r\n  GROUP BY 1, 2\r\n),\r\nSuAnkiKopma AS (\r\n  -- 3. ADIM: Şu an (son 20 saniyedir) veri gelmiyor mu kontrol et\r\n  SELECT \r\n    device_mac,\r\n    CASE WHEN NOW() - son_gorulme > INTERVAL '20 seconds' THEN 1 ELSE 0 END as aktif_kopma\r\n  FROM CihazBazliSonVeri\r\n)\r\nSELECT \r\n  s.device_name AS \"Cihaz Adı\",\r\n  s.device_mac AS \"MAC Adresi\",\r\n  COALESCE(g.gecmis_adet, 0) + COALESCE(a.aktif_kopma, 0) AS \"Toplam Kopma Adedi\"\r\nFROM CihazBazliSonVeri s\r\nLEFT JOIN GecmisKopmalar g ON s.device_mac = g.device_mac\r\nLEFT JOIN SuAnkiKopma a ON s.device_mac = a.device_mac\r\nWHERE (COALESCE(g.gecmis_adet, 0) + COALESCE(a.aktif_kopma, 0)) > 0 -- Hiç kopmamışları listeden atar\r\nORDER BY \"Toplam Kopma Adedi\" DESC;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Kopma Adetleri",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "eflbydjhsyewwb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 14,
+        "x": 10,
+        "y": 41
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.2",
+      "targets": [
+        {
+          "dataset": "wifi_analytics_db",
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\r\n  $__timeGroupAlias(created_at, '5m'), -- 24 saat için 5 dakikalık dilimler akıcı durur\r\n  AVG(rssi_a) AS \"Ortalama RSSI (dBm)\",\r\n  device_name AS \"metric\" -- Her cihaz ayrı bir çizgi olur\r\nFROM wifi_metrics\r\nWHERE $__timeFilter(created_at)\r\nGROUP BY 1, 3\r\nORDER BY 1;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "timeFrom": "24h",
+      "title": "Son 24 saatlik RSSI verileri",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "auto",
+  "schemaVersion": 42,
+  "tags": [],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "New dashboard",
+  "uid": "adzgbfb",
+  "version": 42,
+  "weekStart": ""
+}

@@ -19,17 +19,25 @@ public class MetricsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Post([FromBody] WifiMetric metric)
     {
-        if (metric == null) return BadRequest("Veri boş olamaz.");
+        // 1. Güvenlik Kontrolü: Gelen veri boş mu?
+        if (metric == null)
+        {
+            return BadRequest("Veri boş olamaz.");
+        }
 
         try
         {
+            // 2. KRİTİK DÜZELTME: Repository içindeki InsertMetricAsync metodunu çağırıyoruz.
+            // Bu satır veriyi PostgreSQL'e Dapper üzerinden yazdırır.
             await _repo.InsertMetricAsync(metric);
-            // Mentörünün notundaki başarılı dönüş (200 OK)
+
+            // 3. Başarı Mesajı: Veri DB'ye başarıyla yazıldığında ajana bu döner.
             return Ok(new { message = "Veri başarıyla veritabanına kaydedildi." });
         }
         catch (Exception ex)
         {
-            return StatusCode(500, $"Sunucu hatası: {ex.Message}");
+            // 4. Hata Yönetimi: Bir aksilik olursa (bağlantı kopması vb.) detaylı hata döner.
+            return StatusCode(500, $"Sunucu hatası: {ex.InnerException?.Message ?? ex.Message}");
         }
     }
 }

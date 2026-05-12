@@ -1,45 +1,47 @@
-version: '3.8'
-
 services:
-  # 1. Veritabanı Katmanı
+  # 1. Veritabanı Katmanı (PostgreSQL 18+ Uyumlu)
   wifi-db:
     image: postgres:latest
     container_name: innova_wifi_db
+    restart: always
     environment:
       POSTGRES_USER: innova_admin
       POSTGRES_PASSWORD: innova123
       POSTGRES_DB: wifi_analytics_db
     ports:
-      - "5433:5432" # Dışarıdan erişim için 5433, içeriden 5432
+      - "5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      # ÖNEMLİ: /data eki kaldırıldı, yepyeni bir isimle (v3) sıfırdan açıyoruz
+      - postgres_data_v3:/var/lib/postgresql
 
-  # 2. Merkezi API Katmanı (Yeni Eklendi)
+  # 2. Merkezi API Katmanı (.NET 8.0)
   wifi-api:
     build:
-      context: ../src/Innova.Wifi.Api # Dockerfile'ın bulunduğu klasör yolu
-      dockerfile: Dockerfile
+      context: ../src/Innova.Wifi.Api/Innova.Wifi.Api
+      dockerfile: ../Dockerfile
     container_name: innova_wifi_api
+    restart: always
     depends_on:
       - wifi-db
     ports:
-      - "5001:80" # API'ye dışarıdan 5001 portuyla erişeceğiz
+      - "5001:8080"
     environment:
-      # Veritabanı bağlantı dizesi (Host olarak servis adı olan wifi-db kullanıldı)
-      ConnectionStrings__DefaultConnection: "Host=wifi-db;Database=wifi_analytics_db;Username=innova_admin;Password=innova123;Port=5432"
-      ASPNETCORE_ENVIRONMENT: Development
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Host=wifi-db;Database=wifi_analytics_db;Username=innova_admin;Password=innova123;Port=5432
 
-  # 3. Görselleştirme Katmanı
+  # 3. Görselleştirme Katmanı (Grafana)
   grafana:
     image: grafana/grafana-oss:latest
     container_name: innova_grafana
+    restart: always
     ports:
       - "3000:3000"
     depends_on:
       - wifi-db
     volumes:
-      - grafana_data:/var/lib/grafana
+      - grafana_data_v3:/var/lib/grafana
 
 volumes:
-  postgres_data:
-  grafana_data:
+  postgres_data_v3:
+  grafana_data_v3:
